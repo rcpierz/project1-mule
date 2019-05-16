@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:jersey="http://www.mulesoft.org/schema/mule/jersey" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/jersey http://www.mulesoft.org/schema/mule/jersey/current/mule-jersey.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+    <db:generic-config name="Generic_Database_Configuration" url="jdbc:postgresql://isilo.db.elephantsql.com:5432/hsxmymzc?user=hsxmymzc&amp;password=MA2IOW7yUVohDVKl0haDxrU8luBqEt0E" driverClassName="org.postgresql.Driver" doc:name="Generic Database Configuration"/>
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+    <flow name="getPlayerByNameOrCreate">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/player/{name}" allowedMethods="GET" doc:name="HTTP"/>
+        <set-variable variableName="name" value="#[message.inboundProperties.'http.uri.params'.get('name')]" doc:name="name"/>
+        <logger message="#[flowVars.name]" level="INFO" doc:name="Logger"/>
+        <db:select config-ref="Generic_Database_Configuration" doc:name="PullUser">
+            <db:parameterized-query><![CDATA[SELECT * FROM players WHERE name = #[flowVars.name]]]></db:parameterized-query>
+        </db:select>
+        <choice doc:name="doesnt exist">
+            <when expression="#[payload.size()==0]">
+                <db:insert config-ref="Generic_Database_Configuration" doc:name="CreateUser">
+                    <db:parameterized-query><![CDATA[INSERT INTO players VALUES(#[flowVars.name],25,5,5)]]></db:parameterized-query>
+                </db:insert>
+                <db:select config-ref="Generic_Database_Configuration" doc:name="PullUser">
+                    <db:parameterized-query><![CDATA[SELECT * FROM players WHERE name = #[flowVars.name]]]></db:parameterized-query>
+                </db:select>
+            </when>
+            <otherwise>
+                <logger message="Found User" level="INFO" doc:name="Logger"/>
+            </otherwise>
+        </choice>
+        <byte-array-to-string-transformer doc:name="Byte Array to String"/>
+        <response>
+            <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+        </response>
+    </flow>
+    <flow name="POSTplayerToDB">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/player" allowedMethods="POST" doc:name="HTTP"/>
+        <logger message="Running Flow: POSTplayerToDB" level="INFO" doc:name="Logger"/>
+        <set-variable variableName="name" value="#[message.inboundProperties.'http.query.params'.get('name')]" doc:name="Var: name"/>
+        <set-variable variableName="hp" value="#[message.inboundProperties.'http.query.params'.get('hp')]" doc:name="Var: hp"/>
+        <set-variable variableName="might" value="#[message.inboundProperties.'http.query.params'.get('might')]" doc:name="Var: might"/>
+        <set-variable variableName="sanity" value="#[message.inboundProperties.'http.query.params'.get('sanity')]" doc:name="Var: sanity"/>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+        <db:insert config-ref="Generic_Database_Configuration" doc:name="INSERT player INTO players">
+            <db:parameterized-query><![CDATA[INSERT INTO players VALUES(#[flowVars.name],#[flowVars.hp],#[flowVars.might],#[flowVars.sanity])]]></db:parameterized-query>
+        </db:insert>
+        <response>
+            <logger message="#[message.payload]" level="INFO" doc:name="Logger"/>
+        </response>
+    </flow>
+    <flow name="GETleaderboard">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/player/leaderboard" allowedMethods="GET" doc:name="HTTP"/>
+        <db:select config-ref="Generic_Database_Configuration" doc:name="Database">
+            <db:parameterized-query><![CDATA[SELECT name, rooms FROM players ORDER by rooms DESC LIMIT 5]]></db:parameterized-query>
+        </db:select>
+        <byte-array-to-string-transformer doc:name="Byte Array to String"/>
+    </flow>
+    <flow name="patchPlayer">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/player" allowedMethods="PUT" doc:name="HTTP"/>
+        <logger message="Running flow: patchPlayer" level="INFO" doc:name="Logger"/>
+        <set-variable variableName="name" value="#[message.inboundProperties.'http.query.params'.get('name')]" doc:name="Var: name"/>
+        <set-variable variableName="hp" value="#[message.inboundProperties.'http.query.params'.get('hp')]" doc:name="Var: hp"/>
+        <set-variable variableName="might" value="#[message.inboundProperties.'http.query.params'.get('might')]" doc:name="Var: might"/>
+        <set-variable variableName="sanity" value="#[message.inboundProperties.'http.query.params'.get('sanity')]" doc:name="Var: sanity"/>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+        <db:update config-ref="Generic_Database_Configuration" doc:name="Update Player">
+            <db:parameterized-query><![CDATA[UPDATE players SET hp = #[flowVars.hp], might = #[flowVars.might], sanity = #[flowVars.sanity] WHERE name = #[flowVars.name]]]></db:parameterized-query>
+        </db:update>
+    </flow>
+</mule>
